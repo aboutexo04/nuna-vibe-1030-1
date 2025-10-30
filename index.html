@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>할일 앱</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="app">
+        <header class="app__header">
+          <h1 class="app__title">할일 앱</h1>
+          <p class="app__subtitle">할일을 추가하고, 수정하고, 삭제하세요</p>
+        </header>
+
+        <form id="todo-form" class="todo-form" autocomplete="off">
+          <label class="sr-only" for="todo-input">할일 입력</label>
+          <input id="todo-input" class="todo-input" type="text" placeholder="예: 장보기, 운동하기..." />
+          <button type="submit" class="btn btn--primary">추가</button>
+        </form>
+
+        <ul id="todo-list" class="todo-list" aria-live="polite"></ul>
+
+        <template id="todo-item-template">
+          <li class="todo-item" data-id="">
+            <div class="todo-item__content">
+              <span class="todo-item__text"></span>
+              <input class="todo-item__edit-input" type="text" />
+            </div>
+            <div class="todo-item__actions">
+              <button class="btn btn--ghost js-edit" aria-label="수정">수정</button>
+              <button class="btn btn--ghost js-save" aria-label="저장">저장</button>
+              <button class="btn btn--ghost js-cancel" aria-label="취소">취소</button>
+              <button class="btn btn--danger js-delete" aria-label="삭제">삭제</button>
+            </div>
+          </li>
+        </template>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+  </html>
+
+
