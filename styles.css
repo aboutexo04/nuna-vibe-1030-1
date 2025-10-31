@@ -100,6 +100,22 @@ body {
 
 .todo-item__actions { display: flex; gap: 6px; }
 
+/* 기본 상태: 저장/취소 버튼 숨김, 수정 버튼만 표시 */
+.js-save,
+.js-cancel {
+  display: none;
+}
+
+/* 수정 모드: 수정 버튼 숨김, 저장/취소 버튼 표시 */
+.todo-item.editing .js-edit {
+  display: none;
+}
+
+.todo-item.editing .js-save,
+.todo-item.editing .js-cancel {
+  display: inline-block;
+}
+
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;
