@@ -1,20 +1,30 @@
 (function () {
-  // API 경로 설정 - 여러 경로 시도
-  // ⚠️ 중요: macOS에서 포트 5000은 Apple AirPlay가 사용할 수 있습니다
-  // 백엔드 서버가 다른 포트에서 실행 중일 수 있습니다
-  const POSSIBLE_PORTS = [5003, 5000, 3000, 3001, 5001, 8000]; // 5003을 맨 앞에 배치
-  const POSSIBLE_PATHS = ['/api/todos', '/todos', '/api/v1/todos'];
-  
-  // 현재 설정된 포트 (기본값)
-  let currentPort = POSSIBLE_PORTS[0];
-  let API_BASE = `http://localhost:${currentPort}`;
-  
-  // API Base URL (동적으로 결정됨)
-  let API_BASE_URL = API_BASE + POSSIBLE_PATHS[0];
-  
-  // API 연결 테스트 및 올바른 경로 찾기
-  console.log('🔍 API 연결 경로 찾는 중...');
-  console.log('⚠️ 참고: 포트 5000이 Apple AirPlay에 사용 중일 수 있습니다');
+  // API URL 설정
+  // .env 파일의 API_URL 값과 동일하게 설정
+  const HEROKU_API_URL = 'https://vibe-todo-backend-msy-a2473d9a7497.herokuapp.com/todos';
+  const FALLBACK_LOCAL_URL = 'http://localhost:5003/api/todos';
+
+  // 기본적으로 Heroku URL 사용, localStorage에서 사용자 설정 확인
+  let API_BASE_URL = HEROKU_API_URL;
+
+  // localStorage에서 사용자가 선택한 백엔드 확인
+  try {
+    const savedBackend = localStorage.getItem('backend_type'); // 'heroku' or 'local'
+    const savedUrl = localStorage.getItem('api_url');
+
+    if (savedBackend === 'local' && savedUrl) {
+      API_BASE_URL = savedUrl;
+      console.log('✅ 로컬 백엔드 사용:', API_BASE_URL);
+    } else {
+      // 기본값: Heroku 사용
+      localStorage.setItem('backend_type', 'heroku');
+      localStorage.setItem('api_url', HEROKU_API_URL);
+      console.log('✅ Heroku 백엔드 사용:', API_BASE_URL);
+    }
+  } catch (e) {
+    console.warn('⚠️ localStorage 읽기 실패, Heroku 사용:', e);
+    API_BASE_URL = HEROKU_API_URL;
+  }
 
   const formEl = document.getElementById('todo-form');
   const inputEl = document.getElementById('todo-input');
@@ -23,41 +33,6 @@
 
   /** @type {{ id: string, text: string, createdAt?: Date }[]} */
   let todos = [];
-  
-  // API 경로 자동 감지 함수
-  async function detectApiPath() {
-    for (const path of POSSIBLE_PATHS) {
-      const testUrl = API_BASE + path;
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
-        
-        const response = await fetch(testUrl, {
-          method: 'GET',
-          mode: 'cors',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (response.ok || response.status === 404) {
-          // 404도 서버가 응답한 것이므로 경로는 맞지만 리소스가 없는 경우
-          console.log(`✅ API 경로 발견: ${testUrl}`);
-          return testUrl;
-        }
-      } catch (error) {
-        // 이 경로는 작동하지 않음, 다음 경로 시도
-        continue;
-      }
-    }
-    
-    // 모든 경로 실패
-    console.error('❌ 모든 API 경로 시도 실패');
-    return null;
-  }
 
   // 백엔드 응답을 앱 데이터 구조로 변환
   function mapBackendToApp(backendTodo) {
@@ -76,131 +51,9 @@
     };
   }
 
-  // 백엔드 서버 연결 테스트 및 포트 자동 감지
-  async function testServerConnection() {
-    // 여러 포트 시도
-    for (const port of POSSIBLE_PORTS) {
-      try {
-        const testUrl = `http://localhost:${port}`;
-        console.log(`🔍 포트 ${port} 테스트 중:`, testUrl);
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
-        
-        const response = await fetch(testUrl, {
-          method: 'GET',
-          mode: 'cors',
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        const serverHeader = response.headers.get('server') || '';
-        const contentType = response.headers.get('content-type') || '';
-        
-        console.log(`📊 포트 ${port} 응답:`, {
-          status: response.status,
-          statusText: response.statusText,
-          server: serverHeader,
-          contentType: contentType
-        });
-        
-        // AirPlay 서비스 감지 (AirTunes 서버 헤더)
-        if (serverHeader.includes('AirTunes') || serverHeader.includes('AirPlay')) {
-          console.warn(`⚠️ 포트 ${port}는 Apple AirPlay 서비스가 사용 중입니다`);
-          continue; // 다음 포트 시도
-        }
-        
-        // 일반적인 웹 서버 응답 또는 CORS 헤더 확인
-        if (response.ok || response.status < 500 || contentType.includes('json') || contentType.includes('html')) {
-          // CORS 헤더 확인
-          const corsOrigin = response.headers.get('access-control-allow-origin');
-          const corsMethods = response.headers.get('access-control-allow-methods');
-          
-          if (corsOrigin || corsMethods || response.status === 404) {
-            // CORS 헤더가 있거나 404면 서버가 응답한 것 (라우트 문제일 수 있음)
-            console.log(`✅ 포트 ${port}에서 백엔드 서버 발견!`);
-            currentPort = port;
-            API_BASE = `http://localhost:${port}`;
-            return true;
-          }
-        }
-        
-        // 403은 AirPlay일 가능성이 높음, 다른 포트 시도
-        if (response.status === 403 && serverHeader.includes('AirTunes')) {
-          console.warn(`⚠️ 포트 ${port}는 AirPlay에 사용 중입니다`);
-          continue;
-        }
-        
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          console.log(`⏱️ 포트 ${port} 연결 타임아웃`);
-        } else {
-          console.log(`❌ 포트 ${port} 연결 실패:`, error.message);
-        }
-        continue; // 다음 포트 시도
-      }
-    }
-    
-    console.error('❌ 모든 포트에서 백엔드 서버를 찾을 수 없습니다');
-    console.error('💡 백엔드 서버가 실행 중인지, 그리고 어떤 포트에서 실행 중인지 확인하세요');
-    return false;
-  }
-  
-  // OPTIONS (Preflight) 요청 직접 테스트
-  async function testPreflightRequest() {
-    try {
-      console.log('🔍 Preflight 요청 테스트 중...');
-      
-      const response = await fetch(API_BASE_URL, {
-        method: 'OPTIONS',
-        mode: 'cors',
-        headers: {
-          'Origin': window.location.origin,
-          'Access-Control-Request-Method': 'GET',
-          'Access-Control-Request-Headers': 'Content-Type'
-        }
-      });
-      
-      console.log('📊 Preflight 응답:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: {
-          'access-control-allow-origin': response.headers.get('access-control-allow-origin'),
-          'access-control-allow-methods': response.headers.get('access-control-allow-methods'),
-          'access-control-allow-headers': response.headers.get('access-control-allow-headers'),
-          'access-control-max-age': response.headers.get('access-control-max-age')
-        }
-      });
-      
-      if (response.status === 403 || response.status === 405) {
-        console.error('❌ Preflight 요청이 차단되었습니다:', response.status);
-        return false;
-      }
-      
-      return response.status === 200 || response.status === 204;
-    } catch (error) {
-      console.error('❌ Preflight 테스트 실패:', error);
-      return false;
-    }
-  }
 
   async function fetchTodos() {
-    // API 경로가 설정되지 않았다면 먼저 감지
-    if (!API_BASE_URL || API_BASE_URL === API_BASE + POSSIBLE_PATHS[0]) {
-      const detectedPath = await detectApiPath();
-      if (detectedPath) {
-        API_BASE_URL = detectedPath;
-        console.log('✅ 사용할 API 경로:', API_BASE_URL);
-      } else {
-        console.error('❌ API 경로를 찾을 수 없습니다. 백엔드 서버를 확인하세요.');
-        showConnectionError();
-        return;
-      }
-    }
-    
     try {
-      console.log('📡 할일 조회 시도:', API_BASE_URL);
       const response = await fetch(API_BASE_URL, {
         method: 'GET',
         mode: 'cors',
@@ -208,18 +61,13 @@
           'Content-Type': 'application/json'
         }
       });
-      
-      console.log('📥 응답 상태:', response.status, response.statusText);
-      
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ 응답 본문:', errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const result = await response.json();
-      console.log('✅ 응답 데이터:', result);
-      
+
       if (result.success && Array.isArray(result.data)) {
         todos = result.data.map(mapBackendToApp);
         // createdAt 기준 내림차순 정렬 (최신순)
@@ -496,76 +344,21 @@ app.use(cors({
   }
 
   async function init() {
-    // 현재 프로토콜 확인
-    const currentUrl = window.location.href;
-    const isFileProtocol = currentUrl.startsWith('file://');
-    
-    if (isFileProtocol) {
-      console.warn('⚠️ WARNING: 파일이 file:// 프로토콜로 열려있습니다.');
-      console.warn('⚠️ CORS 정책 때문에 백엔드 서버에 연결할 수 없습니다.');
-      console.warn('💡 해결: 웹 서버로 실행하세요 (python3 -m http.server 8000)');
-      showConnectionError();
-      return;
-    }
-    
     console.log('🚀 앱 초기화 시작...');
-    console.log('📍 프론트엔드 URL:', currentUrl);
-    console.log('📍 백엔드 URL:', API_BASE);
-    
-    // 서버 연결 상태 확인
-    console.log('🔍 1단계: 백엔드 서버 연결 확인 중...');
-    const isConnected = await testServerConnection();
-    
-    if (!isConnected) {
-      console.error('❌ 백엔드 서버에 연결할 수 없습니다.');
-      console.error('💡 확인 사항:');
-      console.error('   1. 백엔드 서버가 실행 중인지 확인');
-      console.error('   2. 백엔드 서버가 어떤 포트에서 실행 중인지 확인 (5000, 3000, 8000 등)');
-      console.error('   3. 포트 5000이 Apple AirPlay에 사용 중일 수 있습니다 (macOS)');
-      showConnectionError();
-      return;
-    } else {
-      console.log(`✅ 백엔드 서버 연결 확인됨 (포트 ${currentPort})`);
-      console.log(`📍 사용할 백엔드 URL: ${API_BASE}`);
+    console.log('📍 사용할 백엔드:', API_BASE_URL);
+
+    try {
+      // 할일 목록 로드
+      await fetchTodos();
+
+      // 폼 이벤트 등록
+      formEl.addEventListener('submit', handleSubmit);
+
+      console.log('✅ 앱 초기화 완료');
+    } catch (error) {
+      console.error('❌ 앱 초기화 실패:', error);
+      alert('백엔드 서버에 연결할 수 없습니다.\n\n현재 설정: ' + API_BASE_URL + '\n\n로컬 서버를 사용하려면 콘솔에서 다음을 실행하세요:\nlocalStorage.setItem("backend_type", "local");\nlocalStorage.setItem("api_url", "http://localhost:5003/api/todos");\n\n그 다음 페이지를 새로고침하세요.');
     }
-    
-    // Preflight 요청 테스트
-    console.log('🔍 2단계: Preflight (OPTIONS) 요청 테스트 중...');
-    const preflightOk = await testPreflightRequest();
-    
-    if (!preflightOk) {
-      console.error('❌ Preflight 요청 실패 - CORS 설정 문제입니다!');
-      console.error('💡 백엔드에서 다음을 확인하세요:');
-      console.error('   1. app.use(cors()) 가 모든 라우트보다 위에 있는지');
-      console.error('   2. OPTIONS 메서드가 허용되어 있는지');
-      console.error('   3. 인증 미들웨어가 OPTIONS 요청을 차단하지 않는지');
-      showConnectionError();
-      return;
-    } else {
-      console.log('✅ Preflight 요청 성공 - CORS 설정 정상');
-    }
-    
-    // API 경로 자동 감지
-    console.log('🔍 3단계: API 경로 자동 감지 중...');
-    const detectedPath = await detectApiPath();
-    if (detectedPath) {
-      API_BASE_URL = detectedPath;
-      console.log('✅ 사용할 API 경로:', API_BASE_URL);
-    } else {
-      console.error('❌ API 경로를 찾을 수 없습니다.');
-      console.error('💡 백엔드 라우트 경로를 확인하세요 (예: /api/todos 또는 /todos)');
-      showConnectionError();
-      return;
-    }
-    
-    // 할일 목록 로드
-    console.log('🔍 4단계: 할일 목록 로드 중...');
-    await fetchTodos();
-    
-    // 폼 이벤트 등록
-    formEl.addEventListener('submit', handleSubmit);
-    
-    console.log('✅ 앱 초기화 완료');
   }
 
   init();
